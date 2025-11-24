@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+bin/
+bin copy/
+obj/
+.idea/
+.vscode/
+*.class
+*.jar
+*.log
+.env

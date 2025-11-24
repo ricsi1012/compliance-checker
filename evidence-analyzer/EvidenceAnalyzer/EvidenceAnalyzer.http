@@ -1,0 +1,51 @@
+@EvidenceAnalyzer_HostAddress = http://localhost:5058
+
+### Analyze a document summary
+POST {{EvidenceAnalyzer_HostAddress}}/analyze/document
+Content-Type: application/json
+Accept: application/json
+
+{
+	"documentText": "Section 4 defines password rotation, MFA enforcement, and quarterly access reviews.",
+	"documentName": "Access Control SOP",
+	"focusAreas": ["Access Control", "Privileged Accounts"],
+	"evidenceTags": ["policy", "sop"]
+}
+
+### Compare a document excerpt with a requirement
+POST {{EvidenceAnalyzer_HostAddress}}/analyze/match
+Content-Type: application/json
+Accept: application/json
+
+{
+	"requirement": "The vendor must encrypt data at rest using AES-256.",
+	"documentText": "All customer data is stored on Azure SQL with Transparent Data Encryption enabled.",
+	"hints": [
+		"Look for explicit encryption mechanisms.",
+		"Mention of AES-256 counts as strong evidence."
+	]
+}
+
+### Fetch gap recommendations
+GET {{EvidenceAnalyzer_HostAddress}}/analyze/gaps?framework=ISO-27001&focus=Access
+
+### Compliance report
+GET {{EvidenceAnalyzer_HostAddress}}/report/compliance/1
+
+### Gap report (AI summary included)
+GET {{EvidenceAnalyzer_HostAddress}}/report/gaps/1
+
+### AI report suggestions
+POST {{EvidenceAnalyzer_HostAddress}}/report/suggestions
+Content-Type: application/json
+Accept: application/json
+
+{
+	"checklistId": 1,
+	"audience": "Executive",
+	"focusAreas": ["Access Control", "Data Protection"],
+	"evidenceHighlights": ["MFA logs", "Backup policy"],
+	"tone": "actionable"
+}
+
+###

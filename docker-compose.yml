@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  # 1. Java Backend (Checklist)
+  checklist-service:
+    build: ./checklist-service
+    ports:
+      - "8080:8080"  # Külső port : Belső port
+    networks:
+      - app-network
+
+  # 2. C# Backend (Analyzer)
+  evidence-analyzer:
+    # Hozzáadtuk a belső mappa nevét is!
+    build: ./evidence-analyzer/EvidenceAnalyzer
+    ports:
+      - "5058:5000" # A te 5058-as portodat térképezzük a belső 5000-re
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      # FONTOS: állítsd be .env fájlban vagy a shellben
+      - OpenAI__ApiKey=INSERT_YOUR_API_KEY_HERE
+      - OpenAI__Model=gpt-4o-mini
+      - ChecklistService__BaseUrl=http://checklist-service:8080/api
+    networks:
+      - app-network
+
+  # 3. Frontend (React)
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"   # A te 5173-as portodat térképezzük az Nginx 80-as portjára
+    depends_on:
+      - checklist-service
+      - evidence-analyzer
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
