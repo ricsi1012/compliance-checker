@@ -1,0 +1,13 @@
+Legacy IT Department Guidelines
+
+SECTION 1: SECURITY & ACCESS (PASS)
+We take security seriously.
+- Passwords must be complex (10+ chars, special signs) and changed every 6 months.
+- We have a documented Incident Response Plan available on the intranet.
+- The Helpdesk maintains a strict log of all reported security incidents.
+
+SECTION 2: DATA HANDLING (FAIL)
+- Backups: We manually copy the database to an external hard drive once a month. (Risk: Infrequent)
+- Encryption: Internal communications are unencrypted to improve network speed.
+- Access Reviews: We review user accounts once a year during the annual performance review. (Requirement is quarterly!)
+- Admin Logs: Admin activity is not logged to save disk space.

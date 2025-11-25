@@ -88,6 +88,8 @@ public class ChecklistService {
             List.of("Q1-Q4 review tracker", "Manager attestations")));
         items.add(new ChecklistItem(103L, "Access Control", "Admin access logged",
             List.of("SIEM search export", "Sample privileged session")));
+        items.add(new ChecklistItem(104L, "Access Control", "Privileged access requires MFA",
+            List.of("SSO policy excerpt", "MFA enrollment logs")));
 
         items.add(new ChecklistItem(201L, "Incident Management", "Incident response plan documented",
             List.of("Latest IR plan PDF", "Approval meeting notes")));
@@ -95,6 +97,8 @@ public class ChecklistService {
             List.of("Incident register", "Ticket references")));
         items.add(new ChecklistItem(203L, "Incident Management", "Recovery procedures tested",
             List.of("Test schedule", "Post-test report")));
+        items.add(new ChecklistItem(204L, "Incident Management", "Tabletop exercises conducted annually",
+            List.of("Facilitator agenda", "Lessons-learned summary")));
 
         items.add(new ChecklistItem(301L, "Data Protection", "Backup policy defined",
             List.of("Backup policy doc", "Version history")));
@@ -102,6 +106,8 @@ public class ChecklistService {
             List.of("Crypto standard", "KMS evidence")));
         items.add(new ChecklistItem(303L, "Data Protection", "Data retention policy exists",
             List.of("Retention matrix", "Automation evidence")));
+        items.add(new ChecklistItem(304L, "Data Protection", "Data disposal procedures documented",
+            List.of("Secure wipe SOP", "Certificate of destruction samples")));
 
         return items;
     }

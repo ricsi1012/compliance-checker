@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { CheckCircle, XCircle, Clock, AlertCircle, ChevronDown, ChevronRight, Upload, FileText, Loader2, Copy, Check } from 'lucide-react';
-import type { ChecklistItem, Category, Checklist } from '../types';
-import { fetchChecklists, analyzeDocument, updateItemStatus } from '../services/api';
+import type { ChecklistItem, Category, Checklist, GapAnalysisResult } from '../types';
+import { fetchChecklists, analyzeDocument, updateItemStatus, fetchGapAnalysis } from '../services/api';
 import ProgressBar from './ProgressBar';
-import ItemDetail from './ItemDetail';
 import { normalizeStatus } from '../utils/status';
 
 type ProcessingResult = {
@@ -14,15 +13,32 @@ type ProcessingResult = {
 };
 
 type ChecklistWithCategories = Checklist & { categories: Category[] };
+type SeverityLevel = 'critical' | 'high' | 'medium';
+type PriorityQueueEntry = {
+  id: string;
+  title: string;
+  description: string;
+  severity: SeverityLevel;
+};
 
 const getCategoryKey = (checklistId: number, categoryName: string) =>
   `${checklistId}::${categoryName}`;
+
+const normalizeSeverity = (value?: string): SeverityLevel => {
+  switch (value?.toLowerCase()) {
+    case 'critical':
+      return 'critical';
+    case 'high':
+      return 'high';
+    default:
+      return 'medium';
+  }
+};
 
 const Dashboard: React.FC = () => {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   
   // Document upload and processing states
@@ -35,6 +51,13 @@ const Dashboard: React.FC = () => {
   const [processingResults, setProcessingResults] = useState<Map<number, ProcessingResult>>(new Map());
   const [copiedResultId, setCopiedResultId] = useState<number | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Gap analysis state
+  const [gapChecklistId, setGapChecklistId] = useState<number | null>(null);
+  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysisResult | null>(null);
+  const [gapLoading, setGapLoading] = useState(false);
+  const [gapError, setGapError] = useState<string | null>(null);
+  const [hasDocumentAnalysisRun, setHasDocumentAnalysisRun] = useState(false);
 
   const items = useMemo<ChecklistItem[]>(() => {
     return checklists.flatMap(checklist => checklist.items);
@@ -69,6 +92,42 @@ const Dashboard: React.FC = () => {
 
     loadItems();
   }, []);
+
+  // Initialize default checklist for gap analysis once data arrives
+  useEffect(() => {
+    if (checklists.length > 0 && gapChecklistId === null) {
+      setGapChecklistId(checklists[0].id);
+    }
+  }, [checklists, gapChecklistId]);
+
+  useEffect(() => {
+    setGapAnalysis(null);
+    setGapError(null);
+    setHasDocumentAnalysisRun(false);
+  }, [gapChecklistId]);
+
+  const runGapAnalysis = useCallback(async () => {
+    if (!gapChecklistId) {
+      setGapAnalysis(null);
+      setGapError(null);
+      return;
+    }
+
+    try {
+      setGapLoading(true);
+      setGapError(null);
+      setGapAnalysis(null);
+      const result = await fetchGapAnalysis(gapChecklistId);
+      setGapAnalysis(result);
+    } catch (err) {
+      console.error('Error loading gap analysis:', err);
+      setGapAnalysis(null);
+      setGapError('Failed to load gap analysis. Ensure the analyzer service is running.');
+    } finally {
+      setGapLoading(false);
+    }
+  }, [gapChecklistId]);
+
 
   // Group checklists and their items by category straight from the API payload
   const checklistViews = useMemo<ChecklistWithCategories[]>(() => {
@@ -108,6 +167,36 @@ const Dashboard: React.FC = () => {
     return Array.from(processingResults.entries()).sort((a, b) => a[0] - b[0]);
   }, [processingResults]);
 
+  const priorityQueueItems = useMemo<PriorityQueueEntry[]>(() => {
+    if (!gapAnalysis) {
+      return [];
+    }
+
+    const aiItems = (gapAnalysis.aiSummary?.priorityGaps ?? []).map((gap, index) => ({
+      id: `ai-${index}-${gap.requirement}`,
+      title: gap.requirement,
+      description: gap.recommendation,
+      severity: normalizeSeverity(gap.severity),
+    } satisfies PriorityQueueEntry));
+
+    const outstandingItems = (gapAnalysis.gaps ?? []).map(gap => ({
+      id: `gap-${gap.requirementId}`,
+      title: gap.description || gap.requirementId,
+      description: gap.suggestedAction,
+      severity: normalizeSeverity(gap.impact),
+    } satisfies PriorityQueueEntry));
+
+    const merged = [...aiItems];
+    outstandingItems.forEach(item => {
+      const alreadyIncluded = merged.some(existing => existing.id === item.id || existing.title === item.title);
+      if (!alreadyIncluded) {
+        merged.push(item);
+      }
+    });
+
+    return merged;
+  }, [gapAnalysis]);
+
   // Calculate statistics
   const stats = useMemo(() => {
     const total = items.length;
@@ -117,16 +206,6 @@ const Dashboard: React.FC = () => {
     
     return { total, passed, failed, pending };
   }, [items]);
-
-  // Handle item click
-  const handleItemClick = (item: ChecklistItem) => {
-    setSelectedItem(item);
-  };
-
-  // Handle status update from ItemDetail component
-  const handleStatusUpdate = (itemId: number, newStatus: 'pending' | 'passed' | 'failed') => {
-    updateItemStatusLocally(itemId, newStatus);
-  };
 
   // Toggle category collapse
   const toggleCategory = (categoryKey: string) => {
@@ -173,6 +252,10 @@ const Dashboard: React.FC = () => {
     setCurrentProcessingItem(null);
     setError(null);
     setUploadLocked(false);
+    setHasDocumentAnalysisRun(false);
+    setGapAnalysis(null);
+    setGapError(null);
+    setGapLoading(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -299,6 +382,8 @@ const Dashboard: React.FC = () => {
       setProcessedCount(prev => prev + 1);
     }
 
+    setHasDocumentAnalysisRun(true);
+    await runGapAnalysis();
     setCurrentProcessingItem(null);
     setIsProcessing(false);
   };
@@ -331,6 +416,21 @@ const Dashboard: React.FC = () => {
         {priority.toUpperCase()}
       </span>
     );
+  };
+
+  const getSeverityBadgeClass = (severity: string) => {
+    if (!severity) {
+      return 'bg-blue-100 text-blue-800 border-blue-300';
+    }
+
+    switch (severity.toLowerCase()) {
+      case 'critical':
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'high':
+        return 'bg-orange-100 text-orange-800 border-orange-300';
+      default:
+        return 'bg-blue-100 text-blue-800 border-blue-300';
+    }
   };
 
   if (loading) {
@@ -669,6 +769,156 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+        {/* AI Gap Analysis */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+              <div>
+                <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Gap Analysis</p>
+                <h2 className="text-2xl font-bold text-gray-900">AI Prioritized Gaps</h2>
+                <p className="text-sm text-gray-500 mt-1">Live analysis powered by the analyzer service.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-600" htmlFor="gap-checklist-select">Checklist</label>
+                <select
+                  id="gap-checklist-select"
+                  value={gapChecklistId ?? ''}
+                  onChange={(event) => setGapChecklistId(Number(event.target.value) || null)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  {checklists.map(checklist => (
+                    <option key={checklist.id} value={checklist.id}>
+                      {checklist.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!hasDocumentAnalysisRun ? (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-900">
+                Run the document analysis above to generate a fresh AI gap summary for this checklist.
+              </div>
+            ) : (
+              <>
+                {gapError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 flex items-start gap-3">
+                    <AlertCircle size={20} className="text-red-600 mt-0.5" />
+                    <p className="text-sm text-red-800">{gapError}</p>
+                  </div>
+                )}
+
+                {gapLoading ? (
+                  <div className="flex items-center gap-3 text-purple-700 bg-purple-50 border border-purple-100 rounded-xl p-4">
+                    <Loader2 size={20} className="animate-spin" />
+                    <p className="text-sm font-medium">Generating AI summary...</p>
+                  </div>
+                ) : gapAnalysis ? (
+                  <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">Uncovered</p>
+                    <ul className="space-y-1 text-sm text-purple-900">
+                      {gapAnalysis.aiSummary.uncoveredRequirements.length === 0 && (
+                        <li>No uncovered controls 🎉</li>
+                      )}
+                      {gapAnalysis.aiSummary.uncoveredRequirements.map((req, index) => (
+                        <li key={`uncovered-${index}`}>{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">Partial Coverage</p>
+                    <ul className="space-y-1 text-sm text-amber-900">
+                      {gapAnalysis.aiSummary.partialCoverage.length === 0 && (
+                        <li>All partially covered requirements are addressed.</li>
+                      )}
+                      {gapAnalysis.aiSummary.partialCoverage.map((req, index) => (
+                        <li key={`partial-${index}`}>{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Next Steps</p>
+                    <ul className="space-y-1 text-sm text-blue-900 list-disc list-inside">
+                      {gapAnalysis.aiSummary.nextSteps.length === 0 && (
+                        <li>No recommendations reported.</li>
+                      )}
+                      {gapAnalysis.aiSummary.nextSteps.map((step, index) => (
+                        <li key={`next-step-${index}`}>{step}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                      <p className="text-sm font-semibold text-gray-700 mb-3">AI Priority Queue</p>
+                      {priorityQueueItems.length === 0 ? (
+                        <p className="text-sm text-gray-500">All controls are covered. Run document analysis to refresh priorities.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {priorityQueueItems.map(item => (
+                            <div key={item.id} className="flex items-start justify-between gap-4 border border-gray-100 rounded-lg p-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{item.title}</p>
+                                <p className="text-sm text-gray-600">{item.description}</p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold border ${getSeverityBadgeClass(item.severity)}`}>
+                                {item.severity.toUpperCase()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700 mb-3">Outstanding Controls</p>
+                      {gapAnalysis.gaps.length === 0 ? (
+                        <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-green-800 text-sm">
+                          All controls are currently satisfied.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {gapAnalysis.gaps.map(gap => (
+                            <div key={gap.requirementId} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-base font-semibold text-gray-900">{gap.requirementId}</h4>
+                                <span className="text-xs font-medium text-gray-500">{gap.category}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 mb-3">{gap.description}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getSeverityBadgeClass(gap.impact)}`}>
+                                  {gap.impact}
+                                </span>
+                                <span className="text-xs text-gray-500">Action: {gap.suggestedAction}</span>
+                              </div>
+                              {gap.evidenceHints.length > 0 && (
+                                <div className="mt-3">
+                                  <p className="text-xs font-semibold text-gray-500 uppercase">Evidence Hints</p>
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {gap.evidenceHints.map((hint, index) => (
+                                      <span key={`${gap.requirementId}-hint-${index}`} className="text-xs bg-white border border-gray-200 rounded-full px-2 py-0.5 text-gray-600">
+                                        {hint}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">Select a checklist to generate the AI gap analysis.</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
       {/* Error Message */}
       {error && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
@@ -756,10 +1006,8 @@ const Dashboard: React.FC = () => {
                             return (
                               <div
                                 key={item.id}
-                                onClick={() => handleItemClick(item)}
-                                className="px-8 py-5 hover:bg-white hover:shadow-md cursor-pointer transition-all duration-200 border-b border-gray-100 last:border-0 relative group/item"
+                                className="px-8 py-5 bg-white transition-all duration-200 border-b border-gray-100 last:border-0 relative"
                               >
-                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover/item:bg-blue-500 transition-colors" />
                                 <div className="flex items-start gap-5">
                                   <div className="flex-shrink-0 mt-1">
                                     {getStatusIcon(status)}
@@ -779,9 +1027,6 @@ const Dashboard: React.FC = () => {
                                       </span>
                                     </div>
                                     <p className="text-gray-900 font-medium leading-relaxed">{requirementText}</p>
-                                  </div>
-                                  <div className="flex-shrink-0 opacity-0 group-hover/item:opacity-100 transition-opacity self-center">
-                                    <ChevronRight size={20} className="text-gray-400" />
                                   </div>
                                 </div>
                               </div>
@@ -816,14 +1061,6 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Item Detail Modal */}
-      {selectedItem && (
-        <ItemDetail
-          item={selectedItem}
-          onClose={() => setSelectedItem(null)}
-          onStatusUpdate={handleStatusUpdate}
-        />
-      )}
     </div>
   );
 };

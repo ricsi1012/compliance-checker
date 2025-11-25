@@ -19,6 +19,7 @@ export const API_CONFIG = {
     baseUrl: ANALYZER_BASE_URL,
     endpoints: {
       analyzeMatch: '/analyze/match',
+      analyzeGaps: '/analyze/gaps',
     },
   },
   

@@ -18,7 +18,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       # FONTOS: állítsd be .env fájlban vagy a shellben
-      - OpenAI__ApiKey=INSERT_YOUR_API_KEY_HERE
+      - OpenAI__ApiKey=${OPENAI_API_KEY}
       - OpenAI__Model=gpt-4o-mini
       - ChecklistService__BaseUrl=http://checklist-service:8080/api
     networks:

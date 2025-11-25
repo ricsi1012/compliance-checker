@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -40,6 +41,13 @@ public sealed record GapAnalysisResponse(
     string Framework,
     DateTimeOffset GeneratedAt,
     IReadOnlyList<GapInsight> Gaps
+);
+
+public sealed record GapAnalysisCombinedResponse(
+    string Framework,
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<GapInsight> Gaps,
+    GapAnalysisAiResponse AiSummary
 );
 
 public sealed record GapInsight(

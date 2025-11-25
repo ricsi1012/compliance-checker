@@ -109,16 +109,42 @@ app.MapPost("/analyze/match", async (AnalyzeMatchRequest request, IAIService aiS
         return options;
     });
 
-app.MapGet("/analyze/gaps", (string? framework, string? focus) =>
+app.MapGet("/analyze/gaps", async (
+        long? checklistId,
+        string? framework,
+        string? focus,
+        IChecklistClient checklistClient,
+        IAIService aiService,
+        CancellationToken cancellationToken) =>
     {
-        var gaps = GapAnalyzer.Analyze(framework, focus);
-        return Results.Json(gaps);
+        var baseline = await BuildGapBaselineAsync(checklistId, framework, focus, checklistClient, cancellationToken);
+        if (baseline is null)
+        {
+            return Results.NotFound(new { error = "Checklist not found" });
+        }
+
+        var requirements = baseline.Gaps
+            .Select(gap => $"{gap.RequirementId}: {gap.Description}")
+            .ToArray();
+        var evidence = baseline.Gaps
+            .SelectMany(gap => gap.EvidenceHints ?? Array.Empty<string>())
+            .ToArray();
+
+        var aiSummary = await aiService.AnalyzeGapsAsync(
+            new GapAnalysisAiRequest(requirements, evidence),
+            cancellationToken);
+
+        return Results.Json(new GapAnalysisCombinedResponse(
+            baseline.Framework,
+            baseline.GeneratedAt,
+            baseline.Gaps,
+            aiSummary));
     })
     .WithName("AnalyzeGaps")
     .WithOpenApi(options =>
     {
-        options.Summary = "List unmet controls for a framework.";
-        options.Description = "Returns curated gap recommendations for ISO 27001 or SOC 2 with optional focus filtering.";
+        options.Summary = "AI-backed gap analysis";
+        options.Description = "Returns curated gaps plus an LLM summary. Provide checklistId to analyze live data.";
         return options;
     });
 
@@ -228,3 +254,48 @@ app.MapPost("/report/suggestions", async (ReportSuggestionRequest request, IChec
     });
 
 app.Run();
+
+static async Task<GapAnalysisResponse?> BuildGapBaselineAsync(
+    long? checklistId,
+    string? framework,
+    string? focus,
+    IChecklistClient checklistClient,
+    CancellationToken cancellationToken)
+{
+    if (checklistId.HasValue)
+    {
+        var checklist = await checklistClient.GetChecklistAsync(checklistId.Value, cancellationToken);
+        if (checklist is null)
+        {
+            return null;
+        }
+
+        var gaps = checklist.Items
+            .Where(item => !string.Equals(item.Status, "passed", StringComparison.OrdinalIgnoreCase))
+            .Select(item => new GapInsight(
+                $"ITEM-{item.Id}",
+                string.IsNullOrWhiteSpace(item.Category) ? "General" : item.Category,
+                string.IsNullOrWhiteSpace(item.Requirement) ? "Requirement missing" : item.Requirement,
+                DetermineImpact(item.Status),
+                "Provide concrete evidence, owner assignment, and due date for this control.",
+                item.Hints?.ToArray() ?? Array.Empty<string>()))
+            .ToList();
+
+        return new GapAnalysisResponse(
+            $"CHECKLIST-{checklist.Id}",
+            DateTimeOffset.UtcNow,
+            gaps);
+    }
+
+    return GapAnalyzer.Analyze(framework, focus);
+}
+
+static string DetermineImpact(string? status)
+{
+    if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
+    {
+        return "High";
+    }
+
+    return "Medium";
+}

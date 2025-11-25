@@ -1,0 +1,12 @@
+Startup Brainstorming & Quick Rules
+Meeting Date: Monday
+
+Tech Stack setup ideas:
+We need to move fast, so let's skip the heavy bureaucracy for now.
+
+- Logins: Let's just use "admin/admin" for the staging server for now so everyone can access it easily. No need for complex passwords yet, they just slow us down.
+- User Access: We'll give everyone admin rights to the repo. We can clean it up next year or when we hire an HR person.
+- Incidents: If the server crashes, just call Dave on his mobile. He will fix it. No need to write reports about it.
+- Data stuff: I think the cloud provider does backups automatically? Not sure, haven't checked.
+- Encryption: HTTP is fine for the MVP, setting up SSL certificates is a pain.
+- Old data: Just keep everything forever, storage is cheap.

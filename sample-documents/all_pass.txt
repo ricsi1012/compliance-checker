@@ -1,0 +1,21 @@
+ACME Corp Information Security Handbook v2.4
+Date: 2024-11-25
+
+1. ACCESS CONTROL POLICY
+To ensure secure access to systems:
+- Password Policy: All users must use passwords with a minimum of 12 characters, including uppercase, lowercase, numbers, and special symbols. Passwords expire every 90 days.
+- Access Reviews: User access rights are reviewed on a quarterly basis (every 3 months) by the Security Team. Revoked access is documented instantly.
+- Admin Access: All administrative actions and log-ins are strictly logged and monitored in the SIEM system.
+- All privileged access must require Multi-Factor Authentication (MFA) to enhance security and protect against unauthorized access.
+
+2. INCIDENT MANAGEMENT
+- Response Plan: We have a documented Incident Response Plan (IRP-2024) stored in the central repository.
+- Incident Log: A dedicated ticket board (Jira Project SEC) serves as the central incident log maintained by the SOC team.
+- Recovery Testing: Disaster recovery procedures and backups are tested twice a year to ensure data integrity.
+- To ensure preparedness for security incidents, ACME Corp will conduct annual tabletop exercises that include a facilitator agenda and a lessons-learned summary to evaluate and improve our incident response capabilities.
+
+3. DATA PROTECTION
+- Backups: Automated daily backups are performed for all production databases.
+- Encryption: All data at rest is encrypted using AES-256 standards. Data in transit uses TLS 1.3.
+- Retention: Customer data is retained for 5 years as per the Data Retention Policy, then securely purged.
+- All data disposal procedures must include a Secure Wipe SOP and a process for issuing Certificates of Destruction to ensure compliance with data disposal regulations.

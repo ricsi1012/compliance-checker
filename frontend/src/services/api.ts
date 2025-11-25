@@ -1,5 +1,17 @@
 import axios from 'axios';
-import type { ChecklistItem, ChecklistApiResponse, ChecklistApiItem, AnalysisRequest, AnalysisResult, UpdateStatusRequest, Checklist } from '../types';
+import type {
+  ChecklistItem,
+  ChecklistApiResponse,
+  ChecklistApiItem,
+  AnalysisRequest,
+  AnalysisResult,
+  UpdateStatusRequest,
+  Checklist,
+  GapAnalysisResult,
+  GapInsight,
+  GapAnalysisAiSummary,
+  PriorityGap,
+} from '../types';
 import { API_CONFIG } from '../config/api.config';
 import { normalizeStatus } from '../utils/status';
 
@@ -13,6 +25,33 @@ interface AnalyzerMatchResponse {
   improvementSuggestion?: string | null;
   recommended_text?: string | null;
   recommendedText?: string | null;
+}
+
+interface GapAnalysisApiResponse {
+  framework: string;
+  generatedAt: string;
+  gaps: Array<GapAnalysisApiGap>;
+  aiSummary: GapAnalysisApiSummary;
+}
+
+interface GapAnalysisApiGap {
+  requirementId: string;
+  category: string;
+  description: string;
+  impact: string;
+  suggestedAction: string;
+  evidenceHints?: string[];
+}
+
+interface GapAnalysisApiSummary {
+  uncovered_requirements?: string[];
+  partial_coverage?: string[];
+  priority_gaps?: Array<{
+    requirement: string;
+    severity: string;
+    recommendation: string;
+  }>;
+  next_steps?: string[];
 }
 
 // Create axios instances
@@ -133,3 +172,47 @@ export const updateItemStatus = async (
 export const setAnalyzerServiceUrl = (url: string) => {
   analyzerApi.defaults.baseURL = url;
 };
+
+/**
+ * Fetch AI-backed gap analysis for a checklist or framework
+ */
+export const fetchGapAnalysis = async (checklistId?: number): Promise<GapAnalysisResult> => {
+  try {
+    const response = await analyzerApi.get<GapAnalysisApiResponse>(
+      API_CONFIG.analyzerService.endpoints.analyzeGaps,
+      { params: checklistId ? { checklistId } : undefined }
+    );
+
+    return {
+      framework: response.data.framework,
+      generatedAt: response.data.generatedAt,
+      gaps: (response.data.gaps ?? []).map(mapGapApiToModel),
+      aiSummary: mapGapSummary(response.data.aiSummary),
+    };
+  } catch (error) {
+    console.error('Error fetching gap analysis:', error);
+    throw error;
+  }
+};
+
+const mapGapApiToModel = (gap: GapAnalysisApiGap): GapInsight => ({
+  requirementId: gap.requirementId,
+  category: gap.category,
+  description: gap.description,
+  impact: gap.impact,
+  suggestedAction: gap.suggestedAction,
+  evidenceHints: gap.evidenceHints ?? [],
+});
+
+const mapGapSummary = (summary: GapAnalysisApiSummary): GapAnalysisAiSummary => ({
+  uncoveredRequirements: summary.uncovered_requirements ?? [],
+  partialCoverage: summary.partial_coverage ?? [],
+  priorityGaps: (summary.priority_gaps ?? []).map(mapPriorityGap),
+  nextSteps: summary.next_steps ?? [],
+});
+
+const mapPriorityGap = (gap: { requirement: string; severity: string; recommendation: string }): PriorityGap => ({
+  requirement: gap.requirement,
+  severity: (gap.severity?.toLowerCase?.() as PriorityGap['severity']) ?? 'medium',
+  recommendation: gap.recommendation,
+});

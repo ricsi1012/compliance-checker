@@ -53,6 +53,35 @@ export interface AnalysisResult {
   recommendedText?: string | null;
 }
 
+export interface GapInsight {
+  requirementId: string;
+  category: string;
+  description: string;
+  impact: string;
+  suggestedAction: string;
+  evidenceHints: string[];
+}
+
+export interface PriorityGap {
+  requirement: string;
+  severity: 'critical' | 'high' | 'medium';
+  recommendation: string;
+}
+
+export interface GapAnalysisAiSummary {
+  uncoveredRequirements: string[];
+  partialCoverage: string[];
+  priorityGaps: PriorityGap[];
+  nextSteps: string[];
+}
+
+export interface GapAnalysisResult {
+  framework: string;
+  generatedAt: string;
+  gaps: GapInsight[];
+  aiSummary: GapAnalysisAiSummary;
+}
+
 export interface UpdateStatusRequest {
   status: ChecklistStatusPayload;
 }
