@@ -62,7 +62,6 @@ Az alkalmazás három fő szolgáltatásból áll, amelyek a `docker-compose.yml
 
 - A feladatban kért példafájlok a gyökérben található `sample-documents/` mappában vannak (`all_pass.txt`, `all_fail.txt`, `mixed.txt`).
 
-      - **Demo link:** https://www.loom.com/share/f2364b4610214a37a3666ffda4e34082
 
 ## ⚠️ Jogi Nyilatkozat
 
